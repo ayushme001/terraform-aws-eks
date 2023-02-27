@@ -12,7 +12,12 @@ terraform {
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = ">= 2.10"
+      version = ">= 2.17"
     }
+
+    # postgresql = { # This line is what needs to change.
+    #   source = "cyrilgdn/postgresql"
+    #   version = "1.15.0"
+    # }
   }
 }

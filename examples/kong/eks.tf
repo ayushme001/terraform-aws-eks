@@ -130,8 +130,8 @@ provider "helm" {
 # }
 
 module "eks_cluster" {
-  # source = "git::https://github.com/tothenew/terraform-aws-eks.git"
-  source = "../"
+  source = "git::https://github.com/tothenew/terraform-aws-eks.git"
+  # source = "../"
   cluster_name    = local.eks_cluster.name
   cluster_version = try(local.eks_cluster.version, "1.24")
 
@@ -218,87 +218,87 @@ module "load_balancer_controller" {
   settings = local.eks_cluster.lb
 }
 
-# resource "kubernetes_ingress_v1" "example_ingress" {
-#   depends_on = [
-#     module.load_balancer_controller
-#   ]
-#   metadata {
-#     name = "example-ingress"
-#     annotations = {
-#       "kubernetes.io/ingress.class"                  = "alb"
-#       "alb.ingress.kubernetes.io/target-type"        = "ip"
-#       "alb.ingress.kubernetes.io/scheme"             = "internet-facing"
-#       "alb.ingress.kubernetes.io/load-balancer-name" = "${local.eks_cluster.name}-alb"
-#       "alb.ingress.kubernetes.io/healthcheck-path"   = "/health"
-#       "alb.ingress.kubernetes.io/listen-ports"       = "[{\"HTTP\": 80}]"
-#       "alb.ingress.kubernetes.io/group.name"         = "eks-prod-alb"
-#       "alb.ingress.kubernetes.io/subnets"            = "subnet-0257e8262a7017948,subnet-062a9cb5ea10455da,subnet-06b6a7e3c22de35ca"
-#     }
-#   }
+resource "kubernetes_ingress_v1" "example_ingress" {
+  depends_on = [
+    module.load_balancer_controller
+  ]
+  metadata {
+    name = "example-ingress"
+    annotations = {
+      "kubernetes.io/ingress.class"                  = "alb"
+      "alb.ingress.kubernetes.io/target-type"        = "ip"
+      "alb.ingress.kubernetes.io/scheme"             = "internet-facing"
+      "alb.ingress.kubernetes.io/load-balancer-name" = "${local.eks_cluster.name}-alb"
+      "alb.ingress.kubernetes.io/healthcheck-path"   = "/health"
+      "alb.ingress.kubernetes.io/listen-ports"       = "[{\"HTTP\": 80}]"
+      "alb.ingress.kubernetes.io/group.name"         = "eks-prod-alb"
+      "alb.ingress.kubernetes.io/subnets"            = "subnet-0257e8262a7017948,subnet-062a9cb5ea10455da,subnet-06b6a7e3c22de35ca"
+    }
+  }
 
-#   spec {
-#       rule {
-#         http {
-#          path {
-#            path = "/app-1*"
-#            backend {
-#              service {
-#                name = "myapp-1"
-#                port {
-#                  number = 80
-#                }
-#              }
-#            }
-#         }
-#       }
-#     }
-#   }
-# }
+  spec {
+      rule {
+        http {
+         path {
+           path = "/app-1*"
+           backend {
+             service {
+               name = "myapp-1"
+               port {
+                 number = 80
+               }
+             }
+           }
+        }
+      }
+    }
+  }
+}
 
-# resource "kubernetes_service_v1" "example" {
-#   depends_on = [
-#     module.load_balancer_controller
-#   ]
-#   metadata {
-#     name = "myapp-1"
-#   }
-#   spec {
-#     selector = {
-#       app = kubernetes_pod.example.metadata.0.labels.app
-#     }
-#     session_affinity = "ClientIP"
-#     port {
-#       port        = 80
-#       target_port = 80
-#     }
+resource "kubernetes_service_v1" "example" {
+  depends_on = [
+    module.load_balancer_controller
+  ]
+  metadata {
+    name = "myapp-1"
+  }
+  spec {
+    selector = {
+      app = kubernetes_pod.example.metadata.0.labels.app
+    }
+    session_affinity = "ClientIP"
+    port {
+      port        = 80
+      target_port = 80
+    }
 
-#     type = "NodePort"
-#   }
-# }
+    type = "NodePort"
+  }
+}
 
 
-# resource "kubernetes_pod" "example" {
-#   depends_on = [
-#     module.load_balancer_controller
-#   ]
-#   metadata {
-#     name = "terraform-example"
-#     labels = {
-#       app = "myapp-1"
-#     }
-#   }
+resource "kubernetes_pod" "example" {
+  depends_on = [
+    module.load_balancer_controller
+  ]
+  metadata {
+    name = "terraform-example"
+    labels = {
+      app = "myapp-1"
+    }
+  }
 
-#   spec {
-#     container {
-#       image = "nginx:latest"
-#       name  = "example"
+  spec {
+    container {
+      image = "nginx:latest"
+      name  = "example"
 
-#       port {
-#         container_port = 80
-#       }
-#     }
-#   }
-# }
+      port {
+        container_port = 80
+      }
+    }
+  }
+}
 
 resource "helm_release" "ingress" {
   name       = "helm-ing"
@@ -315,10 +315,7 @@ resource "helm_release" "ingress" {
 resource "kubernetes_config_map" "kong-config" {
   metadata {
     name = "kong-config"
-  } 
-  depends_on = [
-    module.create_database
-  ]
+  }
 
   data = {
     "nginx_kong.lua" = "${file("./helm/configmap.yml")}"
@@ -327,81 +324,32 @@ resource "kubernetes_config_map" "kong-config" {
 
 resource "helm_release" "kong1" {
   depends_on = [
-    resource.kubernetes_pod.kong_migration
+    kubernetes_config_map.kong-config
   ]
   name       = "kong1"
-  timeout = 180
+  timeout = 60
   # namespace   = "default"
 #  repository = "https://charts.bitnami.com/bitnami"
   chart      = "./helm/kong"
   # version    = "6.0.1"
-  set {
-    name  = "deployment.containers[0].env[1].name"
-    value = "KONG_PG_HOST"
-  }
-  set {
-    name  = "deployment.containers[0].env[1].value"
-    value = "${module.create_database.endpoint}"
-  }
-
-  set {
-    name  = "deployment.containers[0].env[2].name"
-    value = "KONG_PG_USER"
-  }
-  set {
-    name  = "deployment.containers[0].env[2].value"
-    value = "${module.create_database.username}"
-  }
-
-  set {
-    name  = "deployment.containers[0].env[3].name"
-    value = "KONG_PG_PASSWORD"
-  }
-  set {
-    name  = "deployment.containers[0].env[3].value"
-    value = "${module.create_database.password}"
-  }
+  # set {
+  #   name  = "config"
+  #   value = file("./helm/configmap.conf")
+  # }
   values = [
     "${file("./helm/kong-values.yaml")}"
   ]
-
 }
 
-resource "helm_release" "konga1" {
+resource "helm_release" "konga" {
   depends_on = [
     helm_release.kong1
   ]
-  name       = "konga1"
+  name       = "konga"
   # namespace   = "default"
 #  repository = "https://charts.bitnami.com/bitnami"
   chart      = "./helm/konga"
   # version    = "6.0.1"
-  timeout = 180
-
-  set {
-    name  = "deployment.containers[0].env[1].name"
-    value = "DB_HOST"
-  }
-  set {
-    name  = "deployment.containers[0].env[1].value"
-    value = "${module.create_database.endpoint}"
-  }
-  set {
-    name  = "deployment.containers[0].env[3].name"
-    value = "DB_PASSWORD"
-  }
-  set {
-    name  = "deployment.containers[0].env[3].value"
-    value = "${module.create_database.password}"
-  }
-  set {
-    name  = "deployment.containers[0].env[2].name"
-    value = "DB_USER"
-  }
-  set {
-    name  = "deployment.containers[0].env[2].value"
-    value = "${module.create_database.username}"
-  }
 
   values = [
     "${file("./helm/konga-values.yaml")}"
@@ -414,7 +362,7 @@ resource "helm_release" "konga1" {
 # k run kong --image=saifahmadttn/kong:2.7.0 --env=KONG_PG_USER=root --env=KONG_PG_DATABASE=kong_db --env=KONG_DATABASE=postgres --env=KONG_PG_PASSWORD=b9909FTArBOsPoOlYERWC8QMex9KrIEXll --env=KONG_PG_HOST=kong-database-0.c8m4uwvxecdh.ap-south-1.rds.amazonaws.com --command -- kong migrations bootstrap
 
 module "create_database" {
-  source              = "git::https://github.com/ayushme001/terraform-aws-rds.git"
+  source              = "git::https://github.com/tothenew/terraform-aws-rds.git"
   create_rds     = false
   create_aurora = true
 
@@ -422,18 +370,17 @@ module "create_database" {
   vpc_id           = "vpc-0cdbbbd4cedcea769"
   vpc_cidr         = ["172.31.0.0/16"]
 
-  publicly_accessible = true
+  publicly_accessible = false
   allocated_storage = 10
   max_allocated_storage = 20
   engine = "aurora-postgresql"
-  engine_version = "11.18"
-  instance_class = "db.t3.medium"
+  engine_version = "13.6"
+  instance_class = "db.serverless"
   database_name = "mydb"
   username   = "root"
   identifier = "kong-database"
   apply_immediately = false
   storage_encrypted = false
-  port = 5432
   multi_az = false
   db_subnet_group_id = "kong-rds"
   deletion_protection = false
@@ -446,136 +393,4 @@ module "create_database" {
     "Environment" = "dev"
   }
   environment = "dev"
-}
-
-
-data "aws_ssm_parameter" "rds_host" {
-  depends_on = [
-    module.create_database
-  ]
-  name = "/dev/RDS/HOST"
-}
-
-data "aws_ssm_parameter" "rds_password" {
-  depends_on = [
-    module.create_database
-  ]
-  name = "/dev/RDS/PASSWORD"
-}
-
-data "aws_ssm_parameter" "rds_user" {
-  depends_on = [
-    module.create_database
-  ]
-  name = "/dev/RDS/USER"
-}
-
-# module "secrets-store-csi" {
-#   depends_on = [
-#     module.eks_cluster
-#   ]
-#   source = "git::https://github.com/tothenew/terraform-aws-eks.git//modules/secret-store-csi"
-#   cluster_name = module.eks_cluster.cluster_id
-#   oidc_provider_arn = module.eks_cluster.oidc_provider_arn
-#   chart_version = local.workspace.eks_cluster.secrets-store-csi.chart_version
-#   ascp_chart_version = local.workspace.eks_cluster.secrets-store-csi.ascp_chart_version
-#   syncSecretEnabled = local.workspace.eks_cluster.secrets-store-csi.syncSecretEnabled
-#   enableSecretRotation = local.workspace.eks_cluster.secrets-store-csi.enableSecretRotation
-#   namespace_service_accounts = ["${local.workspace.environment_name}:api-provider-service-service-role","${local.workspace.environment_name}:core-service-service-role","${local.workspace.environment_name}:gateway-service-service-role","${local.workspace.environment_name}:content-service-service-role","${local.workspace.environment_name}:editorial-service-service-role","${local.workspace.environment_name}:subscriber-management-service-role","${local.workspace.environment_name}:application-ingestor-service-role","${local.workspace.environment_name}:application-search-service-service-role","${local.workspace.environment_name}:frontend-cms-service-role","${local.workspace.environment_name}:videoready-config-service-role"]
-# }
-# resource "aws_iam_role_policy_attachment" "secrets_integration_policy_attachment" {
-#   depends_on = [
-#     module.secrets-store-csi
-#   ]
-#   count = 1
-#   role       = module.secrets-store-csi.iam_role_name
-#   policy_arn = module.helm_iam_policy.arn
-# }
-
-
-terraform {
-  required_version = ">= 1.3.0"
-  required_providers {
-    postgresql = { # This line is what needs to change.
-      source = "cyrilgdn/postgresql"
-      version = "1.15.0"
-    }
-  }
-}
-
-provider "postgresql" {
-  host            = module.create_database.endpoint
-  port            = module.create_database.port
-  database        = "postgres"
-  username        = module.create_database.username
-  password        = module.create_database.password
-  connect_timeout = 15
-}
-
-resource "postgresql_database" "kong" {
-  depends_on = [
-    module.create_database
-  ]
-  name     = "kong_db"
-}
-
-resource "postgresql_database" "konga" {
-  depends_on = [
-    module.create_database
-  ]
-  name     = "konga_db"
-}
-
-resource "kubernetes_pod" "kong_migration" {
-  depends_on = [
-    postgresql_database.kong
-  ]
-  metadata {
-    name = "kong-migration"
-  }
-
-  spec {
-    container {
-      image = "saifahmadttn/kong:2.7.0"
-      name  = "kong-migration"
-
-      env {
-        name  = "KONG_DATABASE"
-        value = "postgres"
-      }
-      env {
-        name  = "KONG_PG_HOST"
-        value = module.create_database.endpoint
-      }
-      env {
-        name  = "KONG_PG_USER"
-        value = module.create_database.username
-      }
-      env {
-        name  = "KONG_PG_PASSWORD"
-        value = module.create_database.password
-      }
-      env {
-        name  = "KONG_ADMIN_LISTEN"
-        value = "0.0.0.0:8001"
-      }
-      env {
-        name  = "KONG_ADMIN_LISTEN_SSL"
-        value = "0.0.0.0:8444"
-      }
-      env {
-        name  = "KONG_TRUSTED_IPS"
-        value = "0.0.0.0/0,::/0"
-      }
-      env {
-        name  = "KONG_PG_DATABASE"
-        value = "kong_db"
-      }
-      command = [ "kong", "migrations", "bootstrap" ]
-      port {
-        container_port = 8001
-      }
-    }
-    # dns_policy = "None"
-  }
 }
